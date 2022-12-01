@@ -5,7 +5,7 @@ MISTAGCN is a novel deep learning model provided in our paper "Multiple Informat
 
 This project is implemented in python and based mainly on MXNet framework. The main structure of MISTAGCN is
 
-<embed src="./model.pdf" type="application/pdf">
+<img src="model.png" alt="model" title="">
 
 ## Get started
 
