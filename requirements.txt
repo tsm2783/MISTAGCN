@@ -1,0 +1,16 @@
+# pip install -r requirements.txt
+numpy
+matplotlib
+scipy
+pandas
+openpyxl
+pytictoc
+pyarrow
+fastparquet
+Jinja2  #DataFrame.style requires jinja2
+# mxnet
+mxnet-cu102
+#torch
+#tensorboard
+#graphviz
+#gensim
