@@ -90,6 +90,9 @@ data = nd.array(data)
 data = nd.transpose(data, axes=(1, 2, 0))  # N, F, n_time_slices
 # data = data / 1000  #convert unit to k
 
+nd.save('data/YellowTrip/data', [data])
+t.toc('gen data samples, saving data sucessfully')
+
 Yp_sample = nd.zeros((n_sample, N, Tp))
 Xr_sample = nd.zeros((n_sample, N, F, Tr))  # the primary Tw*7*24 time slices are reserved for Xw
 Xd_sample = nd.zeros((n_sample, N, F, Td * Tp))
@@ -104,7 +107,6 @@ for k in range(n_sample):
         Xw_sample[k, :, :, k1 * Tp: k1 * Tp + Tp] = data[:, :, k + Tw * 7 *
                                                          24 - (Tw - k1) * 7 * 24: k + Tw * 7 * 24 - (Tw - k1) * 7 * 24 + Tp]
 
-t.toc('write data samples')
-
 regions = nd.array(regions)
 nd.save('data/YellowTrip/data-samples', [Xr_sample, Xd_sample, Xw_sample, Yp_sample, regions])
+t.toc('gen data samples, saving data samples sucessfully')

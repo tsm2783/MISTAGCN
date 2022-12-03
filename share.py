@@ -31,11 +31,11 @@ N_lng = 20
 R = 6371  # radius of the earth (km)
 
 # key parameters for trainning
-Tp = 3  # Tp < Tr
+K = 3
 Tr = 7
 Td = 3
 Tw = 2
-K = 3
+Tp = 3  # Tp <= Tr
 percent_train = 0.8
 batch_size = 200
 threshold = 0.5

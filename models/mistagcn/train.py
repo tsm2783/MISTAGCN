@@ -12,7 +12,7 @@ from mxnet.metric import MAE, RMSE
 from pytictoc import TicToc
 
 from mistagcn import MISTAGCN
-from share import batch_size, devices, epochs, threshold, runs
+from share import batch_size, devices, epochs, threshold, runs, K, Tr, Td, Tw, Tp
 
 scenario = 'YellowTrip'  # Haikou, YellowTrip
 # runs = 1
@@ -53,7 +53,7 @@ def train(run, runs):
     loader_test = DataLoader(data_test, batch_size=batch_size)
 
     # construct the model
-    net = MISTAGCN(ACG, ADG, AIG, N, F)
+    net = MISTAGCN(ACG, ADG, AIG, K, N, F, Tr, Td, Tw, Tp)
     net.initialize(ctx=devices, force_reinit=True)
     loss_fun = mx.gluon.loss.L2Loss()
     trainer = Trainer(net.collect_params(), 'adam')

@@ -94,7 +94,7 @@ for ax in fig.axes:
 #设置图例和调整图例位置
 fig.legend(lines, labels,loc='upper center',ncol=6, framealpha=False, fontsize=18)
 
-fig_file = 'performance-compare.pdf'
+fig_file = 'results/performance-compare.pdf'
 fig.savefig(fig_file)
 cmd = 'code ' + fig_file
 os.system(cmd)

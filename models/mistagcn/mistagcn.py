@@ -3,14 +3,15 @@ import mxnet as mx
 from mxnet import ndarray as nd
 from mxnet.gluon import nn
 
-from share import Tr, Td, Tw, Tp, K, eps
+from share import eps
 from share import merge_list_mx_ndarray, dot, get_max_eigenvalue
 
 
 class ST_block(mx.gluon.Block):
     r'''
     This is spatial-temporal block in multi information spatial temporal attention graph convolution network (MISTAGCN), where\
-        As is an array of ajacency matrices (ndarray, As[i] denotes the i'th adjacency matrix),\
+        A is an ajacency matrix (ndarray),\
+        K is the order of Chebshev poloynomidal (int),\
         N is the number of nodes in the graph structure (int),\
         F is the number of features recorded on each node (int),\
         T is the number of time slices in recording a sample X_t (int),\
@@ -20,8 +21,9 @@ class ST_block(mx.gluon.Block):
         U_1, U_2, U_3, be are weight parameters of temporal attention mechanism (nd.ndarray),\
         Theta contains the parameters for GCN with Chebyshev ploynomial (nd.ndarray).
     '''
-    def __init__(self, A, N, F, T, F1, T1, **kwargs):
+    def __init__(self, A, K, N, F, T, F1, T1, **kwargs):
         super(ST_block, self).__init__(**kwargs)
+        self.K = K
         self.N = N
         self.F = F
         self.T = T
@@ -30,6 +32,8 @@ class ST_block(mx.gluon.Block):
         # Chebyshev polynomials and parameters
         self.cheb_p = self.gen_cheb_p(A)
         # ResNet, the other path to target, (N, F, T) -> (N, F1, T1)
+        assert F >= F1, 'number of input features should be greater than or equal to number of output features'
+        assert T >= T1, 'length of input time steps should be greater than or equal to length of output time steps'
         self.conv = nn.Conv2D(channels=N, kernel_size=(F-F1+1, T-T1+1), activation='relu')
         # parameters to train
         with self.name_scope():
@@ -64,7 +68,7 @@ class ST_block(mx.gluon.Block):
         lambda_max = get_max_eigenvalue(L)
         L_tilde = 2 / lambda_max * L - nd.eye(N, ctx=A.ctx)
         cheb_p = [nd.eye(N, ctx=A.ctx), L_tilde]
-        for k in range(2, K):
+        for k in range(2, self.K):
             cheb_p.append(2 * L_tilde * cheb_p[-1] - cheb_p[-2])
         cheb_p = merge_list_mx_ndarray(cheb_p)  #K, N, N
         return cheb_p
@@ -96,7 +100,7 @@ class ST_block(mx.gluon.Block):
         # apply spatial attension GCN
         x = nd.transpose(x, axes=(1,0,3,2)) #N, num, T, F
         out = nd.zeros(shape=(N, num, T, self.F1), ctx=ctx)
-        for k in range(K):
+        for k in range(self.K):
             xk = nd.dot((cheb_p[k] * s), x)
             xk = nd.dot(xk, Theta[k])
             out = out + xk
@@ -127,10 +131,15 @@ class MISTAGCN_1(mx.gluon.Block):
     r'''
     This is the first part in multi information spatial temporal attention graph convolution network (MISTAGCN), where\
         A1 and A2 are ajacency matrices for two different graph structures (nd.ndarray),\
+        K is the order of Chebshev poloynomidal (int),\
         N is the number of nodes in the graph structure (int),\
-        F is the number of features recorded on each node (int).
+        F is the number of features recorded on each node (int),\
+        Tr is the number of time slices of recent inpu (int),\
+        Td is the number of segments in daily-period input (int),\
+        Tw is the number of segments in weekly-period input (int),\
+        Tp is the number of time slices to predict (int).
     '''
-    def __init__(self, A1, A2, N, F, **kwargs):
+    def __init__(self, A1, A2, K, N, F, Tr, Td, Tw, Tp, **kwargs):
         super(MISTAGCN_1, self).__init__(**kwargs)
         # construct 6 blocks to treat 6 input cases <AIG, Xr>, <AIG, Xd>, <AIG, Xw>, <ACG, Xr>, <ACG, Xd>, <ACG, Xw>
         # because parameters to train differ from input cases
@@ -142,12 +151,12 @@ class MISTAGCN_1(mx.gluon.Block):
         #     self.blk_acg_d = ST_block(ADG, N, F, Td*Tp, 1, Tp)
         #     self.blk_acg_w = ST_block(ADG, N, F, Tw*Tp, 1, Tp)
         self.submodules = [
-            ST_block(A1, N, F, Tr, 1, Tp),
-            ST_block(A1, N, F, Td*Tp, 1, Tp),
-            ST_block(A1, N, F, Tw*Tp, 1, Tp),
-            ST_block(A2, N, F, Tr, 1, Tp),
-            ST_block(A2, N, F, Td*Tp, 1, Tp),
-            ST_block(A2, N, F, Tw*Tp, 1, Tp),
+            ST_block(A1, K, N, F, Tr, 1, Tp),
+            ST_block(A1, K, N, F, Td*Tp, 1, Tp),
+            ST_block(A1, K, N, F, Tw*Tp, 1, Tp),
+            ST_block(A2, K, N, F, Tr, 1, Tp),
+            ST_block(A2, K, N, F, Td*Tp, 1, Tp),
+            ST_block(A2, K, N, F, Tw*Tp, 1, Tp),
         ]
         for sm in self.submodules:
             self.register_child(sm)
@@ -176,15 +185,17 @@ class MISTAGCN_2(mx.gluon.Block):
     r'''
     This is the second part in multi information spatial temporal attention graph convolution network (MISTAGCN), where\
         A is the ajacency matrix of graph (nd.ndarray),\
-        N is the number of nodes in the graph structure (int).
+        K is the order of Chebshev poloynomidal (int),\
+        N is the number of nodes in the graph structure (int),\
+        Tp is the number of time slices to predict (int).
     '''
-    def __init__(self, A, N, **kwargs):
+    def __init__(self, A, K, N, Tp, **kwargs):
         super(MISTAGCN_2, self).__init__(**kwargs)
         self.blk = nn.Sequential()
         with self.name_scope():
-            self.blk.add(ST_block(A, N, 6, Tp, 6, Tp))
-            self.blk.add(ST_block(A, N, 6, Tp, 6, Tp))
-            self.blk.add(ST_block(A, N, 6, Tp, 1, Tp))
+            self.blk.add(ST_block(A, K, N, 6, Tp, 6, Tp))
+            self.blk.add(ST_block(A, K, N, 6, Tp, 6, Tp))
+            self.blk.add(ST_block(A, K, N, 6, Tp, 1, Tp))
 
     def forward(self, x):
         # Input x is of shape (num, N, F(6), Tp),
@@ -196,17 +207,20 @@ class MISTAGCN_2(mx.gluon.Block):
 class MISTAGCN(mx.gluon.Block):
     r'''
     This is spatial-temporal block in multi information spatial temporal attention graph convolution network (MISTAGCN), where parameters\
-        ACG is the ajacency matrix of correlation graph (nd.ndarray),\
-        ADG is the ajacency matrix of distance graph (nd.ndarray),\
-        AIG is the ajacency matrix of interaction graph (nd.ndarray),\
+        A1, A2 and A3 are ajacency matrices for three different graph structures (nd.ndarray),\
+        K is the order of Chebshev poloynomidal (int),\
         N is the number of nodes in the graph structure (int),\
-        F is the number of features recorded on each node (int).
+        F is the number of features recorded on each node (int),\
+        Tr is the number of time slices of recent inpu (int),\
+        Td is the number of segments in daily-period input (int),\
+        Tw is the number of segments in weekly-period input (int),\
+        Tp is the number of time slices to predict (int).
     '''
-    def __init__(self, ADG, ACG, AIG, N, F, **kwargs):
+    def __init__(self, A1, A2, A3, K, N, F, Tr, Td, Tw, Tp, **kwargs):
         super(MISTAGCN, self).__init__(**kwargs)
         with self.name_scope():
-            self.blk1 = MISTAGCN_1(ACG, ADG, N, F)
-            self.blk2 = MISTAGCN_2(AIG, N)
+            self.blk1 = MISTAGCN_1(A1, A2, K, N, F, Tr, Td, Tw, Tp)
+            self.blk2 = MISTAGCN_2(A3, K, N, Tp)
 
     def forward(self, xr, xd, xw):
         # input x is of shape (num, N, F, T), num equals batch_size for almost all cases, except for the last batch (num <= batch_size).

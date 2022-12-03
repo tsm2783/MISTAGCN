@@ -13,13 +13,10 @@ t = TicToc()  # create instance of class
 t.tic()  # Start timer
 
 # merge flow and weather data to get data samples
-path0 = 'data/Haikou/traffic-flows.db'
-path1 = 'data/Haikou/weather-air-condition-Haikou-2017.xlsx'
-path = 'data/Haikou/data-samples'
 t.toc('gen data samples, merge traffic flows and weather conditions')
 
 # read trafffic flow_out and flow_in
-con = sqlite3.connect(path0)
+con = sqlite3.connect('data/Haikou/traffic-flows.db')
 query = f'''select * from Flow_out
             where time_slices between '{dates[0]}' and '{dates[1]}'
             order by time_slices
@@ -57,7 +54,7 @@ flow_out = df_flow_out.to_numpy()  # flow_out has more than one clumn than flow_
 flow_in = df_flow_in.to_numpy()
 
 # read weather and air condition
-df_weather_air = pd.read_excel(path1, sheet_name='Sheet1')
+df_weather_air = pd.read_excel('./data/Haikou/weather-air-condition-haikou-2017.xlsx', sheet_name='Sheet1')
 df_weather_air = df_weather_air.iloc[:, 1:]
 weather_air = df_weather_air.to_numpy()
 
@@ -79,6 +76,9 @@ n_sample = n_time_slices - Tp - Tw * 7 * 24  # the last Tp time slices are reser
 assert n_sample > 0, 'The number of samples shoould be greater than 0, i.e. n_time_slices-Tp-Tw*7*24 > 0.'
 data = nd.array(data)
 
+nd.save('data/Haikou/data', [data])
+t.toc('gen data samples, saving data sucessfully')
+
 Yp_sample = nd.zeros((n_sample, N, Tp))
 Xr_sample = nd.zeros((n_sample, N, F, Tr))  # the primary Tw*7*24 time slices are reserved for Xw
 Xd_sample = nd.zeros((n_sample, N, F, Td * Tp))
@@ -95,5 +95,5 @@ for k in range(n_sample):
                                                         24 - (Tw - k1) * 7 * 24: k + Tw * 7 * 24 - (Tw - k1) * 7 * 24 + Tp]
 
 # write the data to file
-nd.save(path, [Xr_sample, Xd_sample, Xw_sample, Yp_sample, regions])
-t.toc('gen data samples, saving data sucessfully')
+nd.save('data/Haikou/data-samples', [Xr_sample, Xd_sample, Xw_sample, Yp_sample, regions])
+t.toc('gen data samples, saving data samples sucessfully')
